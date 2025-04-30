@@ -1,4 +1,5 @@
-﻿using System;
+﻿#nullable enable
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -41,14 +42,16 @@ public partial class GraphEditorView : UserControl
 
     private static void UpdateView(GraphEditorView view)
     {
+        if (view.Source == null) return;
+
         view.Source.Editor = view.Editor;
         view.Source.GraphStateLoad();
         //view.Editor.FitToScreen();
     }
 
-    public RedGraph Source
+    public RedGraph? Source
     {
-        get => (RedGraph)GetValue(SourceProperty);
+        get => (RedGraph?)GetValue(SourceProperty);
         set => SetValue(SourceProperty, value);
     }
 
@@ -60,12 +63,20 @@ public partial class GraphEditorView : UserControl
         remove => RemoveHandler(NodeDoubleClickEvent, value);
     }
 
-    private NodeViewModel _selectedNode;
+    private NodeViewModel? _selectedNode;
 
-    public NodeViewModel SelectedNode
+    public NodeViewModel? SelectedNode
     {
         get => _selectedNode;
-        set => SetField(ref _selectedNode, value);
+        set
+        {
+            if (_selectedNode != value)
+            {
+                _selectedNode = value;
+                UpdateTypeHighlight();
+                OnPropertyChanged();
+            }
+        }
     }
 
     private ObservableCollection<object> _selectedNodes = new();
@@ -73,16 +84,40 @@ public partial class GraphEditorView : UserControl
     public ObservableCollection<object> SelectedNodes
     {
         get => _selectedNodes;
-        set => SetField(ref _selectedNodes, value);
+        set
+        {
+            if (_selectedNodes != value)
+            {
+                 if (_selectedNodes is System.Collections.Specialized.INotifyCollectionChanged oldCollection)
+                 {
+                     System.Collections.Specialized.CollectionChangedEventManager.RemoveHandler(oldCollection, SelectedNodes_CollectionChanged);
+                 }
+
+                _selectedNodes = value;
+
+                if (_selectedNodes is System.Collections.Specialized.INotifyCollectionChanged newCollection)
+                {
+                     System.Collections.Specialized.CollectionChangedEventManager.AddHandler(newCollection, SelectedNodes_CollectionChanged);
+                }
+
+                UpdateTypeHighlight();
+                OnPropertyChanged();
+            }
+        }
     }
 
     public Point ViewportLocation { get; set; }
 
-    private readonly AppViewModel _appViewModel;
+    private readonly AppViewModel? _appViewModel;
 
     public GraphEditorView()
     {
         InitializeComponent();
+
+        if (_selectedNodes is System.Collections.Specialized.INotifyCollectionChanged initialCollection)
+        {
+            System.Collections.Specialized.CollectionChangedEventManager.AddHandler(initialCollection, SelectedNodes_CollectionChanged);
+        }
 
         _appViewModel = Locator.Current.GetService<AppViewModel>();
 
@@ -95,6 +130,57 @@ public partial class GraphEditorView : UserControl
             {
                 ViewportUpdated();
             });
+    }
+
+    private void SelectedNodes_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        Dispatcher?.InvokeAsync(UpdateTypeHighlight, DispatcherPriority.Background);
+    }
+
+    private void UpdateTypeHighlight()
+    {
+        if (Source?.Nodes == null)
+            return;
+
+        NodeViewModel? selectedNodeVm = null;
+        string? selectedDetailType = null;
+        Type? selectedVmType = null;
+        const string typeKey = "Type";
+
+        if (SelectedNodes?.Count == 1 && SelectedNodes[0] is NodeViewModel sn)
+        {
+            selectedNodeVm = sn;
+            selectedNodeVm.Details.TryGetValue(typeKey, out selectedDetailType);
+            selectedVmType = selectedNodeVm.GetType();
+        }
+
+        foreach (var node in Source.Nodes)
+        {
+            if (node is NodeViewModel nvm)
+            {
+                bool shouldHighlight = false;
+
+                if (selectedNodeVm != null && selectedVmType != null)
+                {
+                    // Check if both nodes have the detail type key
+                    bool selectedHasDetail = selectedDetailType != null;
+                    bool currentHasDetail = nvm.Details.TryGetValue(typeKey, out var currentDetailType);
+
+                    if (selectedHasDetail && currentHasDetail)
+                    {
+                        // Case 1: Both have the detail key -> Compare detail values (for eg: PauseCondition, UseWorkspot)
+                        shouldHighlight = currentDetailType == selectedDetailType;
+                    }
+                    else
+                    {
+                        // Case 2: At least one lacks the detail key -> Compare ViewModel types (for eg: Section, Choice)
+                        shouldHighlight = nvm.GetType() == selectedVmType;
+                    }
+                }
+
+                nvm.IsTypeHighlighted = shouldHighlight;
+            }
+        }
     }
 
     private void ViewportUpdated()
@@ -122,7 +208,7 @@ public partial class GraphEditorView : UserControl
 
     private void Editor_OnContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
-        if (sender is not NodifyEditor nodifyEditor || Source == null)
+        if (sender is not NodifyEditor nodifyEditor || Source == null || _appViewModel == null)
         {
             return;
         }
@@ -142,14 +228,16 @@ public partial class GraphEditorView : UserControl
 
             addMenu.Items.Add(CreateMenuItem("Open Dialog ...", "FolderOpen", "WolvenKitYellow", async () =>
             {
+                if (_appViewModel == null) return;
                 await _appViewModel.SetActiveDialog(new TypeSelectorDialogViewModel(types)
                 {
                     DialogHandler = model =>
                     {
+                        if (_appViewModel == null) return;
                         _appViewModel.CloseDialogCommand.Execute(null);
                         if (model is TypeSelectorDialogViewModel { SelectedEntry.UserData: Type selectedType })
                         {
-                            Source.CreateSceneNode(selectedType, ViewportLocation);
+                            Source?.CreateSceneNode(selectedType, ViewportLocation);
                         }
                     }
                 });
@@ -177,14 +265,16 @@ public partial class GraphEditorView : UserControl
 
             addMenu.Items.Add(CreateMenuItem("Open Dialog ...", "FolderOpen", "WolvenKitYellow", async () =>
             {
+                if (_appViewModel == null) return;
                 await _appViewModel.SetActiveDialog(new TypeSelectorDialogViewModel(types)
                 {
                     DialogHandler = model =>
                     {
+                        if (_appViewModel == null) return;
                         _appViewModel.CloseDialogCommand.Execute(null);
                         if (model is TypeSelectorDialogViewModel { SelectedEntry.UserData: Type selectedType })
                         {
-                            Source.CreateQuestNode(selectedType, ViewportLocation);
+                            Source?.CreateQuestNode(selectedType, ViewportLocation);
                         }
                     }
                 });
@@ -308,7 +398,7 @@ public partial class GraphEditorView : UserControl
 
     private static MenuItem CreateMenuItem(string header, string iconKind, Action click) => CreateMenuItem(header, iconKind, "", click);
 
-    private static MenuItem CreateMenuItem(string header, string iconKind, string iconColor, Action click)
+    private static MenuItem CreateMenuItem(string header, string iconKind, string? iconColor, Action click)
     {
         var item = new MenuItem
         {
@@ -338,12 +428,12 @@ public partial class GraphEditorView : UserControl
 
     #region INotifyPropertyChanged
 
-    public event PropertyChangedEventHandler PropertyChanged;
+    public event PropertyChangedEventHandler? PropertyChanged;
 
-    protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null) =>
+    protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
-    protected bool SetField<T>(ref T field, T value, [CallerMemberName] string propertyName = null)
+    protected bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value))
         {

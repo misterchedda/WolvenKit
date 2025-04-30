@@ -124,6 +124,10 @@
                                         <Setter Property="Header" Value="{Binding Title}" />
                                         <Setter Property="HeaderTemplate" Value="{StaticResource HeaderTemplate}" />
                                     </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsTypeHighlighted}" Value="True">
+                                        <Setter Property="BorderBrush" Value="{StaticResource WolvenKitYellow}" />
+                                        <Setter Property="BorderThickness" Value="2" />
+                                    </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </nodify:Node.Style>

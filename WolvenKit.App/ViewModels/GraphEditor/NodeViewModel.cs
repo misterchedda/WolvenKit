@@ -16,6 +16,9 @@ public abstract partial class NodeViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private Point _location;
 
+    [ObservableProperty]
+    private bool _isTypeHighlighted;
+
     public Size Size { get; set; }
 
     public string Title { get; protected set; } = null!;
