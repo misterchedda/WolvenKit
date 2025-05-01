@@ -546,12 +546,14 @@ internal class NodeProperties
         else if (node is questCharacterManagerNodeDefinition characterManagerCasted)
         {
             details["Manager"] = GetNameFromClass(characterManagerCasted?.Type?.Chunk);
+            var managerType = characterManagerCasted?.Type?.GetValue();
 
-            if (characterManagerCasted?.Type?.Chunk is questCharacterManagerParameters_NodeType charParamsNodeCasted)
+            if (managerType is questCharacterManagerParameters_NodeType charParamsNodeCasted)
             {
                 details["Sub Manager"] = GetNameFromClass(charParamsNodeCasted?.Subtype?.Chunk);
+                var subType = charParamsNodeCasted?.Subtype?.GetValue();
 
-                if (charParamsNodeCasted?.Subtype?.Chunk is questCharacterManagerParameters_SetStatusEffect setStatusEffectNodeCasted)
+                if (subType is questCharacterManagerParameters_SetStatusEffect setStatusEffectNodeCasted)
                 {
                     details["Is Player"] = setStatusEffectNodeCasted?.IsPlayer == true ? "True" : "False";
                     details["Is Player Status Effect Source"] = setStatusEffectNodeCasted?.IsPlayerStatusEffectSource == true ? "True" : "False";
@@ -561,8 +563,22 @@ internal class NodeProperties
                     details["Status Effect ID"] = setStatusEffectNodeCasted?.StatusEffectID.GetResolvedText()!;
                     details["Status Effect Source Object"] = ParseGameEntityReference(setStatusEffectNodeCasted?.StatusEffectSourceObject);
                 }
+                else if (subType is questCharacterManagerParameters_SetMortality setMortalityNodeCasted)
+                {
+                    details["Is Player"] = setMortalityNodeCasted?.IsPlayer == true ? "True" : "False";
+                    details["Puppet Ref"] = ParseGameEntityReference(setMortalityNodeCasted?.PuppetRef);
+                    details["Reset To Default"] = setMortalityNodeCasted?.ResetToDefault == true ? "True" : "False";
+                    details["Source"] = setMortalityNodeCasted?.Source.ToString() ?? "(None)";
+                    details["State"] = setMortalityNodeCasted?.State.ToEnumString() ?? "(None)";
+                }
+                else if (subType is questCharacterManagerParameters_SetAttitudeGroupForPuppet setAttitudeNodeCasted)
+                {
+                    details["Group Name"] = setAttitudeNodeCasted?.GroupName.ToString() ?? "(None)";
+                    details["Is Player"] = setAttitudeNodeCasted?.IsPlayer == true ? "True" : "False";
+                    details["Puppet Ref"] = ParseGameEntityReference(setAttitudeNodeCasted?.PuppetRef);
+                }
             }
-            if (characterManagerCasted?.Type?.Chunk is questCharacterManagerVisuals_NodeType charVisualsNodeCasted)
+            else if (managerType is questCharacterManagerVisuals_NodeType charVisualsNodeCasted)
             {
                 details["Sub Manager"] = GetNameFromClass(charVisualsNodeCasted?.Subtype?.Chunk);
 
@@ -591,11 +607,12 @@ internal class NodeProperties
                     }
                 }
             }
-            if (characterManagerCasted?.Type?.Chunk is questCharacterManagerCombat_NodeType charCombatNodeCasted)
+            else if (managerType is questCharacterManagerCombat_NodeType charCombatNodeCasted)
             {
                 details["Sub Manager"] = GetNameFromClass(charCombatNodeCasted?.Subtype?.Chunk);
+                var combatSubType = charCombatNodeCasted?.Subtype?.GetValue();
 
-                if (charCombatNodeCasted?.Subtype?.Chunk is questCharacterManagerCombat_EquipWeapon equipWpnNodeCasted)
+                if (combatSubType is questCharacterManagerCombat_EquipWeapon equipWpnNodeCasted)
                 {
                     details["Equip"] = equipWpnNodeCasted?.Equip == true ? "True" : "False";
                     details["Equip Last Weapon"] = equipWpnNodeCasted?.EquipLastWeapon == true ? "True" : "False";
@@ -604,6 +621,15 @@ internal class NodeProperties
                     details["Instant"] = equipWpnNodeCasted?.Instant == true ? "True" : "False";
                     details["Slot ID"] = equipWpnNodeCasted?.SlotID.GetResolvedText()!;
                     details["Weapon ID"] = equipWpnNodeCasted?.WeaponID.GetResolvedText()!;
+                }
+                else if (combatSubType is questCharacterManagerCombat_ModifyHealth modifyHealthNodeCasted)
+                {
+                    details["Damage Source Ref"] = ParseGameEntityReference(modifyHealthNodeCasted?.DamageSourceRef);
+                    details["Is Player"] = modifyHealthNodeCasted?.IsPlayer == true ? "True" : "False";
+                    details["No Damage Indicator"] = modifyHealthNodeCasted?.NoDamageIndicator == true ? "True" : "False";
+                    details["Percent"] = modifyHealthNodeCasted?.Percent.ToString() ?? "(None)";
+                    details["Puppet Ref"] = ParseGameEntityReference(modifyHealthNodeCasted?.PuppetRef);
+                    details["Set Exact Value"] = modifyHealthNodeCasted?.SetExactValue == true ? "True" : "False";
                 }
             }
         }
@@ -735,7 +761,9 @@ internal class NodeProperties
         {
             details["Manager"] = GetNameFromClass(vehicleNodeCasted?.Type?.Chunk);
 
-            if (vehicleNodeCasted?.Type?.Chunk is questMoveOnSpline_NodeType splineParams)
+            var vehicleManagerType = vehicleNodeCasted?.Type?.GetValue();
+
+            if (vehicleManagerType is questMoveOnSpline_NodeType splineParams)
             {
                 details["Arrive With Pivot"] = splineParams?.ArriveWithPivot == true ? "True" : "False";
                 details["Audio Curves"] = splineParams?.AudioCurves.DepotPath!;
@@ -750,11 +778,57 @@ internal class NodeProperties
                 details["Traffic Deletion Mode"] = splineParams?.TrafficDeletionMode.ToEnumString()!;
                 details["Vehicle Ref"] = ParseGameEntityReference(splineParams?.VehicleRef);
             }
-            if (vehicleNodeCasted?.Type?.Chunk is questTeleport_NodeType teleportParams)
+            else if (vehicleManagerType is questTeleport_NodeType teleportParams)
             {
                 details["Entity Reference"] = ParseGameEntityReference(teleportParams?.EntityReference);
                 details["Destination Offset"] = teleportParams?.Params?.DestinationOffset.ToString()!;
                 details["Destination Ref"] = GetNameFromUniversalRef(teleportParams?.Params?.DestinationRef?.Chunk);
+            }
+            else if (vehicleManagerType is questSetImmovable_NodeType immovableNode)
+            {
+                details["Vehicle Ref"] = ParseGameEntityReference(immovableNode?.VehicleRef);
+                details["Enabled"] = immovableNode?.Enable == true ? "True" : "False";
+            }
+            else if (vehicleManagerType is questEnablePlayerVehicle_NodeType enablePlayerVehicleNode)
+            {
+                details["Despawn"] = enablePlayerVehicleNode?.Despawn == true ? "True" : "False";
+                details["Enable"] = enablePlayerVehicleNode?.Enable == true ? "True" : "False";
+                details["Make Player Active Vehicle"] = enablePlayerVehicleNode?.MakePlayerActiveVehicle == true ? "True" : "False";
+                details["Vehicle Name"] = enablePlayerVehicleNode?.Vehicle != null 
+                                          ? enablePlayerVehicleNode.Vehicle.ToString() 
+                                          : "(None)";
+            }
+            else if (vehicleManagerType is questAssignCharacter_NodeType assignCharacterNode)
+            {
+                details["Assign"] = assignCharacterNode?.Assign == true ? "True" : "False";
+                details["Character Ref"] = ParseGameEntityReference(assignCharacterNode?.CharacterRef);
+                details["Clear Assigned Vehicle"] = assignCharacterNode?.ClearAssignedVehicleIdWhenUnmounting == true ? "True" : "False";
+                details["Entry Anim Name"] = assignCharacterNode?.EntryAnimName.ToString() ?? "(None)";
+                details["Entry Slot Name"] = assignCharacterNode?.EntrySlotName.ToString() ?? "(None)";
+                details["Is Instant"] = assignCharacterNode?.IsInstant == true ? "True" : "False";
+                details["Is Player"] = assignCharacterNode?.IsPlayer == true ? "True" : "False";
+                details["Slot Name"] = assignCharacterNode?.SlotName.ToString() ?? "(None)";
+                details["Vehicle Ref"] = ParseGameEntityReference(assignCharacterNode?.VehicleRef);
+            }
+        }
+        else if (node is questRewardManagerNodeDefinition rewardManagerNodeCasted)
+        {
+            details["Manager"] = GetNameFromClass(rewardManagerNodeCasted?.Type?.Chunk);
+            var rewardManagerType = rewardManagerNodeCasted?.Type?.GetValue();
+
+            if (rewardManagerType is questGiveReward_NodeType giveRewardNode)
+            {
+                if (giveRewardNode.Rewards != null && giveRewardNode.Rewards.Count > 0)
+                {
+                    for (int i = 0; i < giveRewardNode.Rewards.Count; i++)
+                    {
+                        details[$"Reward #{i + 1}"] = giveRewardNode.Rewards[i].GetResolvedText() ?? "(invalid TDBID)";
+                    }
+                }
+                else
+                {
+                    details["Rewards"] = "(None)";
+                }
             }
         }
 
