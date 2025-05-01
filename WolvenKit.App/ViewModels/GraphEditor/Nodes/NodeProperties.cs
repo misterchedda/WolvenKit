@@ -964,32 +964,62 @@ internal class NodeProperties
 
     private static string ParseGameEntityReference(gameEntityReference? entRef)
     {
-        string str = "-";
-
-        if (entRef != null)
+        if (entRef == null)
         {
-            if (entRef.DynamicEntityUniqueName != "None")
-            {
-                str = entRef.DynamicEntityUniqueName!;
-            }
-            if (entRef.Reference != 0)
-            {
-                str = entRef.Reference.GetResolvedText()!;
-            }
+            return "-";
+        }
 
-            if (entRef.Names.Count > 0)
+        string baseStr = "-";
+
+        // Handle DynamicEntityUniqueName first if present
+        if (entRef.DynamicEntityUniqueName != "None")
+        {
+            baseStr = entRef.DynamicEntityUniqueName!;
+        }
+        else
+        {
+            if (entRef.Type == WolvenKit.RED4.Types.Enums.gameEntityReferenceType.EntityRef)
             {
-                string names = "";
-                foreach (var name in entRef.Names)
+                if (entRef.Reference != 0)
                 {
-                    names += (names == "" ? "" : ", ") + name;
+                    baseStr = entRef.Reference.GetResolvedText()!;
                 }
-
-                str += " [" + names + "]";
+            }
+            else if (entRef.Type == WolvenKit.RED4.Types.Enums.gameEntityReferenceType.SlotID)
+            {
+                baseStr = $"Slot: {entRef.SlotName}";
+            }
+            else if (entRef.Type == WolvenKit.RED4.Types.Enums.gameEntityReferenceType.Tag)
+            {
+                if (entRef.Names.Count > 0)
+                {
+                    baseStr = $"Tag: {string.Join(", ", entRef.Names)}";
+                }
+                else
+                {
+                    baseStr = "Tag: (empty)";
+                }
+            }
+            else if (entRef.Type == WolvenKit.RED4.Types.Enums.gameEntityReferenceType.SceneActorContextName)
+            {
+                baseStr = $"Context: {entRef.SceneActorContextName}";
             }
         }
 
-        return str;
+        if (entRef.Names.Count > 0 && entRef.Type != WolvenKit.RED4.Types.Enums.gameEntityReferenceType.Tag)
+        {
+            string names = string.Join(", ", entRef.Names);
+            if (baseStr != "-")
+            {
+                baseStr += $" [{names}]";
+            }
+            else
+            {
+                baseStr = $"Names: [{names}]";
+            }
+        }
+
+        return baseStr;
     }
 
     private static string GetNameFromClass(RedBaseClass? node)
