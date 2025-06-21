@@ -16,6 +16,9 @@ namespace WolvenKit.Views.Documents;
 /// </summary>
 public partial class RDTGraphView2
 {
+    private bool _isFullScreen = false;
+    private System.Windows.Window _fullScreenWindow = null;
+
     public RDTGraphView2()
     {
         InitializeComponent();
@@ -144,5 +147,104 @@ public partial class RDTGraphView2
         }
 
         BuildBreadcrumb();
+    }
+
+    private void FullScreenButton_Click(object sender, RoutedEventArgs e)
+    {
+        ToggleFullScreen();
+    }
+
+    private void ToggleFullScreen()
+    {
+        if (!_isFullScreen)
+        {
+            EnterFullScreen();
+        }
+        else
+        {
+            ExitFullScreen();
+        }
+    }
+
+    private void EnterFullScreen()
+    {
+        // Create a new full screen window
+        _fullScreenWindow = new System.Windows.Window
+        {
+            Title = $"WolvenKit - {ViewModel?.MainGraph?.Title ?? "Graph Editor"} - Full Screen",
+            WindowStyle = WindowStyle.None,
+            WindowState = WindowState.Maximized,
+            AllowsTransparency = false,
+            Background = System.Windows.Media.Brushes.Black
+        };
+
+        // Create a new GraphEditorView for the full screen window
+        var fullScreenEditor = new GraphEditorView
+        {
+            Source = Editor.Source,
+            SelectedNode = Editor.SelectedNode,
+            SelectedNodes = Editor.SelectedNodes,
+            ViewportLocation = Editor.ViewportLocation
+        };
+        
+        _fullScreenWindow.SetCurrentValue(System.Windows.Window.ContentProperty, fullScreenEditor);
+        
+        // Add escape key handler
+        _fullScreenWindow.KeyDown += (s, e) =>
+        {
+            if (e.Key == Key.Escape || e.Key == Key.F11)
+            {
+                ExitFullScreen();
+            }
+        };
+        
+        _fullScreenWindow.Show();
+
+        // Update button state
+        _isFullScreen = true;
+        UpdateFullScreenButtonIcon();
+
+        // Handle window closing
+        _fullScreenWindow.Closed += (s, e) => ExitFullScreen();
+    }
+
+    private void ExitFullScreen()
+    {
+        if (_fullScreenWindow == null) return;
+
+        // Sync any changes back to the original editor
+        if (_fullScreenWindow.Content is GraphEditorView fullScreenEditor)
+        {
+            Editor.ViewportLocation = fullScreenEditor.ViewportLocation;
+            Editor.SelectedNode = fullScreenEditor.SelectedNode;
+            Editor.SelectedNodes = fullScreenEditor.SelectedNodes;
+        }
+
+        // Close and cleanup full screen window
+        _fullScreenWindow.Close();
+        _fullScreenWindow = null;
+        
+        // Update state
+        _isFullScreen = false;
+        UpdateFullScreenButtonIcon();
+    }
+
+    private void UpdateFullScreenButtonIcon()
+    {
+        if (FullScreenButton?.Content is Viewbox viewbox &&
+            viewbox.Child is Canvas canvas &&
+            canvas.Children[0] is System.Windows.Shapes.Path path)
+        {
+            if (_isFullScreen)
+            {
+                // Exit full screen icon
+                path.Data = System.Windows.Media.Geometry.Parse("M5,16h3v3h2v-5H5V16z M8,8H5v2h5V5H8V8z M14,19h2v-3h3v-2h-5V19z M16,8V5h-2v5h5V8H16z");
+            }
+            else
+            {
+                // Enter full screen icon
+                path.Data = System.Windows.Media.Geometry.Parse("M7,14H5v5h5v-2H7V14z M5,10h2V7h3V5H5V10z M17,7h-3v2h3v3h2V7V5h-2V7z M14,14h3v3h2v-5h-5V14z");
+            }
+        }
     }
 }
