@@ -25,11 +25,11 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             
-            <StackPanel
-                x:Name="Breadcrumb"
+        <StackPanel
+            x:Name="Breadcrumb"
                 Grid.Column="0"
-                VerticalAlignment="Center"
-                Orientation="Horizontal" />
+            VerticalAlignment="Center"
+            Orientation="Horizontal" />
                 
             <Button
                 x:Name="FullScreenButton"

@@ -37,43 +37,31 @@
                                                 Path=Source.ItemsDragCompletedCommand}">
             <nodify:NodifyEditor.Resources>
                 <DataTemplate x:Key="HeaderTemplate">
-                    <Border Background="{Binding Background}" 
-                            Margin="-6" 
-                            Padding="10"
-                            HorizontalAlignment="Stretch" 
-                            VerticalAlignment="Stretch">
-                        <Border BorderBrush="#44FFFFFF" 
-                                BorderThickness="0,0,0,1" 
-                                Padding="10,0,10,8"
-                                Margin="-10,0,-10,0">
-                            <TextBlock
-                                Margin="0"
-                                Text="{Binding}"
-                                FontWeight="Bold"
-                                FontSize="21" />
-                        </Border>
-                    </Border>
+                    <TextBlock
+                        Margin="0"
+                        Text="{Binding}" />
                 </DataTemplate>
 
                 <DataTemplate x:Key="DetailedHeaderTemplate">
-                    <Border Background="{Binding Background}" 
-                            Margin="-6" 
-                            Padding="10"
-                            HorizontalAlignment="Stretch" 
-                            VerticalAlignment="Stretch">
-                        <StackPanel Orientation="Vertical" Margin="0">
-                            <Border BorderBrush="#44FFFFFF" 
-                                    BorderThickness="0,0,0,1" 
-                                    Padding="10,0,10,8" 
-                                    Margin="-10,0,-10,8">
-                                <TextBlock
-                                    Margin="0"
-                                    Text="{Binding Title}"
-                                    FontWeight="Bold"
-                                    FontSize="21" />
-                            </Border>
+                    <StackPanel Orientation="Vertical" Margin="-6">
+                        <!-- Header section with full background -->
+                        <Border Background="{Binding Background}" 
+                                Padding="10,6,10,6"
+                                HorizontalAlignment="Stretch" 
+                                VerticalAlignment="Stretch">
+                            <TextBlock
+                                Margin="0"
+                                Text="{Binding Title}"
+                                FontWeight="Bold"
+                                FontSize="21" />
+                        </Border>
 
-                            <ItemsControl ItemsSource="{Binding Details}" Margin="0,0,0,12">
+                        <!-- Content section with subtle background -->
+                        <Border Background="{Binding ContentBackground}" 
+                                Padding="10,6,10,6"
+                                HorizontalAlignment="Stretch" 
+                                VerticalAlignment="Stretch">
+                            <ItemsControl ItemsSource="{Binding Details}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <StackPanel
@@ -95,8 +83,8 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                        </StackPanel>
-                    </Border>
+                        </Border>
+                    </StackPanel>
                 </DataTemplate>
 
                 <local:NodeTemplateSelector x:Key="nodeTemplateSelector">
@@ -174,9 +162,7 @@
                                     Anchor="{Binding Anchor,
                                                      Mode=OneWayToSource}"
                                     Header="{Binding Title}"
-                                    IsConnected="{Binding IsConnected}"
-                                    Margin="0,2,0,2"
-                                    Background="Transparent" />
+                                    IsConnected="{Binding IsConnected}" />
                             </DataTemplate>
                         </nodify:Node.OutputConnectorTemplate>
                     </nodify:Node>

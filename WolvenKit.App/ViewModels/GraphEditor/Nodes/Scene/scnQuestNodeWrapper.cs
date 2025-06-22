@@ -21,6 +21,7 @@ public class scnQuestNodeWrapper : BaseSceneViewModel<scnQuestNode>
             var questNodeType = NodeProperties.GetNameFromClass(_castedData.QuestNode.Chunk);
             Title = $"[{UniqueId}] {questNodeType}";
             Background = GetBackgroundForQuestNodeType(_castedData.QuestNode.Chunk);
+            ContentBackground = GetContentBackgroundForQuestNodeType(_castedData.QuestNode.Chunk);
         }
         else
         {
@@ -147,6 +148,52 @@ public class scnQuestNodeWrapper : BaseSceneViewModel<scnQuestNode>
             questInteractiveObjectManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#3355AAB2")), // Dark blue-lime tint
             questPhoneManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#33B25522")), // Dark orange-lime tint
             _ => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#33666666")) // Default darker gray tint
+        };
+    }
+
+    private static Brush GetContentBackgroundForQuestNodeType(questNodeDefinition node)
+    {
+        // Very subtle tint for content area (much lighter than header)
+        return node switch
+        {
+            questStartNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11228B22")), // Very subtle green tint
+            questEndNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11B22222")), // Very subtle red tint
+            questInputNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#112288B2")), // Very subtle blue tint
+            questOutputNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11B28822")), // Very subtle orange tint
+            questConditionNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11B2B222")), // Very subtle yellow tint
+            questPhaseNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11B222B2")), // Very subtle purple tint
+            questSceneNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1122B2B2")), // Very subtle cyan tint
+            questRandomizerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11B2AA22")), // Very subtle orange tint
+            questFlowControlNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1155AA22")), // Very subtle lime tint
+            questSwitchNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11AA2255")), // Very subtle pink tint
+            questLogicalAndNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#112255AA")), // Very subtle light blue tint
+            questLogicalXorNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11AA5522")), // Very subtle brown tint
+            questLogicalHubNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1155AA55")), // Very subtle green-blue tint
+            questFactsDBManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11AA22AA")), // Very subtle magenta tint
+            questItemManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1177AA22")), // Very subtle olive tint
+            questCharacterManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11AA7722")), // Very subtle amber tint
+            questUIManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#112277AA")), // Very subtle teal tint
+            questAudioNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11AA2277")), // Very subtle rose tint
+            questJournalNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1177AA77")), // Very subtle sage tint
+            questPauseConditionNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#22FF6600")), // Subtle orange tint - still prominent but toned down
+            questSceneManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1122B2B2")), // Very subtle cyan tint
+            questRenderFxManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11B2AA22")), // Very subtle orange tint  
+            questSpawnManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11AA22B2")), // Very subtle purple-magenta tint
+            questTriggerManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11B222AA")), // Very subtle purple-green tint
+            questEntityManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1122AAB2")), // Very subtle blue-green tint
+            questEnvironmentManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11AAB222")), // Very subtle yellow-green tint
+            questEventManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11B2B2AA")), // Very subtle yellow-cyan tint
+            questMappinManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11AA77B2")), // Very subtle blue-sage tint
+            questRewardManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11B277AA")), // Very subtle teal-amber tint
+            questTimeManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1177B2AA")), // Very subtle teal-sage tint
+            questVisionModesManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11AA77AA")), // Very subtle magenta-sage tint
+            questVoicesetManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1177AAAA")), // Very subtle teal-sage tint
+            questFXManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11B2AA22")), // Very subtle orange tint
+            questPuppetAIManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11AA2255")), // Very subtle pink tint
+            questCrowdManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#115522AA")), // Very subtle purple-lime tint
+            questInteractiveObjectManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1155AAB2")), // Very subtle blue-lime tint
+            questPhoneManagerNodeDefinition => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11B25522")), // Very subtle orange-lime tint
+            _ => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#11666666")) // Very subtle default gray tint
         };
     }
 }
