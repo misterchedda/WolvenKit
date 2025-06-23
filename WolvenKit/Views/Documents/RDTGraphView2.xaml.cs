@@ -27,7 +27,7 @@ public partial class RDTGraphView2
     private System.Windows.Threading.DispatcherTimer _graphRefreshTimer;
     private bool _graphRefreshPending = false;
     private System.Windows.Controls.StackPanel _fullScreenBreadcrumb;
-    private System.Func<WolvenKit.App.ViewModels.Dialogs.DialogViewModel, System.Threading.Tasks.Task> _originalSetActiveDialog;
+    private WolvenKit.App.ViewModels.Shell.AppViewModel _appViewModel;
 
     public RDTGraphView2()
     {
@@ -648,9 +648,9 @@ public partial class RDTGraphView2
         var loadingText = new System.Windows.Controls.TextBlock
         {
             Text = "Loading graph...",
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-            VerticalAlignment = System.Windows.VerticalAlignment.Center,
-            Foreground = System.Windows.Media.Brushes.Gray,
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+                VerticalAlignment = System.Windows.VerticalAlignment.Center,
+                Foreground = System.Windows.Media.Brushes.Gray,
             FontSize = 14,
             Margin = new System.Windows.Thickness(0, 80, 0, 0)
         };
@@ -678,7 +678,7 @@ public partial class RDTGraphView2
                         Mode = System.Windows.Data.BindingMode.OneWay
                     };
                     graphEditorView.SetBinding(GraphEditorView.SourceProperty, sourceBinding);
-
+                    
                     // Replace the loading text with the actual graph
                     graphWrapper.Child = graphEditorView;
                     
@@ -777,23 +777,23 @@ public partial class RDTGraphView2
             SetupTreeDataChangeSync(dataViewModel, graphViewModel, graphEditor);
         }
 
-                    // Subscribe to graph selection changes to update tree
-            if (graphViewModel?.MainGraph != null && graphEditor != null)
+        // Subscribe to graph selection changes to update tree
+        if (graphViewModel?.MainGraph != null && graphEditor != null)
+        {
+            graphEditor.PropertyChanged += (sender, e) =>
             {
-                graphEditor.PropertyChanged += (sender, e) =>
+                if (e.PropertyName == nameof(graphEditor.SelectedNode))
                 {
-                    if (e.PropertyName == nameof(graphEditor.SelectedNode))
+                    var selectedNode = graphEditor.SelectedNode;
+                    if (selectedNode != null && dataViewModel != null)
                     {
-                        var selectedNode = graphEditor.SelectedNode;
-                        if (selectedNode != null && dataViewModel != null)
-                        {
-                            // Find corresponding chunk in tree
+                        // Find corresponding chunk in tree
                             var correspondingChunk = FindChunkInTree(dataViewModel.GetRootChunk(), selectedNode.Data);
-                            if (correspondingChunk != null)
-                            {
+                        if (correspondingChunk != null)
+                        {
                                 // Expand all parent nodes to make the selection visible
                                 ExpandParentNodes(correspondingChunk);
-                                dataViewModel.SelectedChunk = correspondingChunk;
+                            dataViewModel.SelectedChunk = correspondingChunk;
                                 dataViewModel.ScrollToNode(correspondingChunk);
                             }
                             else
@@ -1277,41 +1277,46 @@ public partial class RDTGraphView2
 
     private void SetupDialogInterception()
     {
-        var appViewModel = Locator.Current.GetService<WolvenKit.App.ViewModels.Shell.AppViewModel>();
-        if (appViewModel != null)
+        _appViewModel = Locator.Current.GetService<WolvenKit.App.ViewModels.Shell.AppViewModel>();
+        if (_appViewModel != null)
         {
-            // Store the original SetActiveDialog method
-            _originalSetActiveDialog = appViewModel.SetActiveDialog;
-            
-            // Replace with our custom implementation that shows dialogs on fullscreen window
-            appViewModel.SetActiveDialog = async (dialogViewModel) =>
-            {
-                if (_fullScreenWindow != null && dialogViewModel != null)
-                {
-                    // Show dialog on fullscreen window instead
-                    await ShowDialogOnFullScreenWindow(dialogViewModel);
-                }
-                else
-                {
-                    // Fallback to original behavior
-                    await _originalSetActiveDialog(dialogViewModel);
-                }
-            };
+            // Subscribe to property changes to intercept dialog activation
+            _appViewModel.PropertyChanged += OnAppViewModelPropertyChanged;
         }
     }
 
     private void RestoreDialogInterception()
     {
-        var appViewModel = Locator.Current.GetService<WolvenKit.App.ViewModels.Shell.AppViewModel>();
-        if (appViewModel != null && _originalSetActiveDialog != null)
+        if (_appViewModel != null)
         {
-            // Restore the original SetActiveDialog method
-            appViewModel.SetActiveDialog = _originalSetActiveDialog;
-            _originalSetActiveDialog = null;
+            // Unsubscribe from property changes
+            _appViewModel.PropertyChanged -= OnAppViewModelPropertyChanged;
+            _appViewModel = null;
         }
     }
 
-    private async System.Threading.Tasks.Task ShowDialogOnFullScreenWindow(WolvenKit.App.ViewModels.Dialogs.DialogViewModel dialogViewModel)
+    private void OnAppViewModelPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(WolvenKit.App.ViewModels.Shell.AppViewModel.ActiveDialog) && 
+            _fullScreenWindow != null && 
+            _appViewModel?.ActiveDialog != null)
+        {
+            // A dialog was just set - intercept it and show on fullscreen window instead
+            var dialogViewModel = _appViewModel.ActiveDialog;
+            
+            // Clear the dialog from the main window
+            _appViewModel.ActiveDialog = null;
+            _appViewModel.CloseDialogCommand.Execute(null);
+            
+                         // Show it on our fullscreen window
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(new System.Action(() =>
+            {
+                ShowDialogOnFullScreenWindow(dialogViewModel);
+            }));
+        }
+    }
+
+    private void ShowDialogOnFullScreenWindow(WolvenKit.App.ViewModels.Dialogs.DialogViewModel dialogViewModel)
     {
         // Create the appropriate dialog view based on the view model type
         System.Windows.Window dialog = null;
