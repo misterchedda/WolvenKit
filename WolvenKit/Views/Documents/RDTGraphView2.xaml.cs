@@ -8,6 +8,7 @@ using Splat;
 using WolvenKit.App.ViewModels.GraphEditor;
 using WolvenKit.App.ViewModels.GraphEditor.Nodes.Quest;
 using WolvenKit.App.ViewModels.GraphEditor.Nodes.Scene;
+using WolvenKit.App.ViewModels.Shell;
 using WolvenKit.Core.Interfaces;
 using WolvenKit.RED4.Types;
 using WolvenKit.Views.GraphEditor;
@@ -26,6 +27,7 @@ public partial class RDTGraphView2
     private System.Windows.Threading.DispatcherTimer _graphRefreshTimer;
     private bool _graphRefreshPending = false;
     private System.Windows.Controls.StackPanel _fullScreenBreadcrumb;
+    private System.Func<WolvenKit.App.ViewModels.Dialogs.DialogViewModel, System.Threading.Tasks.Task> _originalSetActiveDialog;
 
     public RDTGraphView2()
     {
@@ -216,6 +218,9 @@ public partial class RDTGraphView2
             // Subscribe to property changes to update title when dirty state changes
             docViewModel.PropertyChanged += OnDocumentPropertyChanged;
 
+            // Intercept dialog system to show dialogs on fullscreen window instead of main window
+            SetupDialogInterception();
+
             // Get the existing tab data instead of creating new view models
             var dataTab = docViewModel.TabItemViewModels.OfType<WolvenKit.App.ViewModels.Documents.RDTDataViewModel>().FirstOrDefault();
             var graphTab = docViewModel.TabItemViewModels.OfType<WolvenKit.App.ViewModels.Documents.RDTGraphViewModel2>().FirstOrDefault();
@@ -291,6 +296,9 @@ public partial class RDTGraphView2
             docViewModel.PropertyChanged -= OnDocumentPropertyChanged;
             docViewModel.PropertyChanged -= OnFullScreenDocumentPropertyChanged;
         }
+
+        // Restore original dialog system
+        RestoreDialogInterception();
 
         // Close and cleanup full screen window
         _fullScreenWindow.Close();
@@ -769,32 +777,234 @@ public partial class RDTGraphView2
             SetupTreeDataChangeSync(dataViewModel, graphViewModel, graphEditor);
         }
 
-        // Subscribe to graph selection changes to update tree
-        if (graphViewModel?.MainGraph != null && graphEditor != null)
-        {
-            graphEditor.PropertyChanged += (sender, e) =>
+                    // Subscribe to graph selection changes to update tree
+            if (graphViewModel?.MainGraph != null && graphEditor != null)
             {
-                if (e.PropertyName == nameof(graphEditor.SelectedNode))
+                graphEditor.PropertyChanged += (sender, e) =>
                 {
-                    var selectedNode = graphEditor.SelectedNode;
-                    if (selectedNode != null && dataViewModel != null)
+                    if (e.PropertyName == nameof(graphEditor.SelectedNode))
                     {
-                        // Find corresponding chunk in tree
-                        var correspondingChunk = FindChunkInTree(dataViewModel.RootChunk, selectedNode.Data);
-                        if (correspondingChunk != null)
+                        var selectedNode = graphEditor.SelectedNode;
+                        if (selectedNode != null && dataViewModel != null)
                         {
-                            dataViewModel.SelectedChunk = correspondingChunk;
+                            // Find corresponding chunk in tree
+                            var correspondingChunk = FindChunkInTree(dataViewModel.GetRootChunk(), selectedNode.Data);
+                            if (correspondingChunk != null)
+                            {
+                                // Expand all parent nodes to make the selection visible
+                                ExpandParentNodes(correspondingChunk);
+                                dataViewModel.SelectedChunk = correspondingChunk;
+                                dataViewModel.ScrollToNode(correspondingChunk);
+                            }
+                            else
+                            {
+                                // If direct match fails, try to find the node in the graph structure
+                                var nodeData = selectedNode.Data;
+                                if (nodeData != null)
+                                {
+                                    ChunkViewModel foundChunk = null;
+
+                                    // Try to find in scene graph structure
+                                    if (dataViewModel.GetData() is scnSceneResource)
+                                    {
+                                        var rootChunk = dataViewModel.GetRootChunk();
+                                        if (rootChunk != null)
+                                        {
+                                            rootChunk.CalculateProperties();
+                                            rootChunk.IsExpanded = true;
+                                            
+                                            var sceneGraphChunk = rootChunk.GetPropertyChild("sceneGraph");
+                                            if (sceneGraphChunk != null)
+                                            {
+                                                sceneGraphChunk.IsExpanded = true;
+                                                
+                                                var graphChunk = sceneGraphChunk.GetPropertyChild("graph");
+                                                if (graphChunk != null)
+                                                {
+                                                    graphChunk.IsExpanded = true;
+                                                    
+                                                    // For scene graphs, the "graph" property IS the nodes array
+                                                    foundChunk = FindNodeInArray(graphChunk, nodeData);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    // Try to find in quest graph structure
+                                    else if (dataViewModel.GetData() is graphGraphResource)
+                                    {
+                                        var rootChunk = dataViewModel.GetRootChunk();
+                                        if (rootChunk != null)
+                                        {
+                                            rootChunk.IsExpanded = true;
+                                            
+                                            var graphChunk = rootChunk.GetPropertyChild("graph");
+                                            if (graphChunk != null)
+                                            {
+                                                graphChunk.IsExpanded = true;
+                                                
+                                                var nodesArray = graphChunk.GetPropertyChild("nodes");
+                                                if (nodesArray != null)
+                                                {
+                                                    nodesArray.IsExpanded = true;
+                                                    foundChunk = FindNodeInArray(nodesArray, nodeData);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    if (foundChunk != null)
+                                    {
+                                        // Expand the found node itself to show its properties
+                                        foundChunk.IsExpanded = true;
+                                        
+                                        // For scnQuestNode, also expand the questNode property to show its contents
+                                        if (foundChunk.Data is scnQuestNode)
+                                        {
+                                            // Ensure properties are calculated before trying to access them
+                                            foundChunk.CalculateProperties();
+                                            var questNodeProperty = foundChunk.GetPropertyChild("questNode");
+                                            if (questNodeProperty != null)
+                                            {
+                                                questNodeProperty.IsExpanded = true;
+                                            }
+                                        }
+                                        else if (foundChunk.Data is IRedBaseHandle handle && handle.GetValue() is scnQuestNode)
+                                        {
+                                            // Handle case where scnQuestNode is wrapped in a handle
+                                            foundChunk.CalculateProperties();
+                                            var questNodeProperty = foundChunk.GetPropertyChild("questNode");
+                                            if (questNodeProperty != null)
+                                            {
+                                                questNodeProperty.IsExpanded = true;
+                                            }
+                                        }
+                                        
+                                        // Expand all parent nodes to make the selection visible
+                                        ExpandParentNodes(foundChunk);
+                                        
+                                        // Select the node
+                                        dataViewModel.SelectedChunk = foundChunk;
+                                        
+                                        // Scroll to the selected node with a small delay to ensure UI has updated
+                                        System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                                        {
+                                            dataViewModel.ScrollToNode(foundChunk);
+                                        }), System.Windows.Threading.DispatcherPriority.Background);
+                                    }
+                                }
+                            }
                         }
                     }
-                }
-            };
+                };
 
             // Subscribe to graph data changes to update tree
             SetupGraphDataChangeSync(dataViewModel, graphViewModel);
         }
     }
 
-    private WolvenKit.App.ViewModels.Shell.ChunkViewModel FindChunkInTree(WolvenKit.App.ViewModels.Shell.ChunkViewModel root, object targetData)
+    private ChunkViewModel FindNodeInArray(ChunkViewModel nodesArray, object nodeData)
+    {
+        if (nodesArray?.TVProperties == null) return null;
+        
+        foreach (var nodeChunk in nodesArray.TVProperties)
+        {
+            // For scene graphs, the chunk data is a CHandle<scnSceneGraphNode>, so we need to get the actual node
+            var actualNodeData = nodeChunk.Data;
+            if (nodeChunk.Data is IRedBaseHandle handle && handle.GetValue() is scnSceneGraphNode actualSceneNode)
+            {
+                actualNodeData = actualSceneNode;
+            }
+            
+            // Check if this chunk's data matches
+            if (actualNodeData == nodeData || 
+                (actualNodeData != null && nodeData != null && actualNodeData.Equals(nodeData)))
+            {
+                return nodeChunk;
+            }
+            
+            // For scene nodes, check the nodeId
+            if (nodeData is scnSceneGraphNode sceneNode && 
+                actualNodeData is scnSceneGraphNode chunkSceneNode)
+            {
+                if (sceneNode.NodeId.Id == chunkSceneNode.NodeId.Id)
+                {
+                    return nodeChunk;
+                }
+            }
+            
+            // For quest nodes, check the id
+            if (nodeData is questNodeDefinition questNode && 
+                nodeChunk.Data is questNodeDefinition chunkQuestNode)
+            {
+                if (questNode.Id == chunkQuestNode.Id)
+                {
+                    return nodeChunk;
+                }
+            }
+            
+            // Additional check for quest phase nodes
+            if (nodeData is questPhaseNodeDefinition questPhaseNode && 
+                nodeChunk.Data is questPhaseNodeDefinition chunkQuestPhaseNode &&
+                questPhaseNode.Id == chunkQuestPhaseNode.Id)
+            {
+                return nodeChunk;
+            }
+            
+            // Check for other quest node types by id property
+            var nodeDataType = nodeData?.GetType();
+            var chunkDataType = nodeChunk.Data?.GetType();
+            if (nodeDataType != null && chunkDataType != null && nodeDataType == chunkDataType)
+            {
+                // Try to get Id property using reflection
+                var nodeIdProp = nodeDataType.GetProperty("Id");
+                var nodeNodeIdProp = nodeDataType.GetProperty("NodeId");
+                
+                if (nodeIdProp != null)
+                {
+                    var nodeId = nodeIdProp.GetValue(nodeData);
+                    var chunkId = nodeIdProp.GetValue(nodeChunk.Data);
+                    if (nodeId != null && chunkId != null && nodeId.Equals(chunkId))
+                    {
+                        return nodeChunk;
+                    }
+                }
+                else if (nodeNodeIdProp != null)
+                {
+                    var nodeNodeId = nodeNodeIdProp.GetValue(nodeData);
+                    var chunkNodeId = nodeNodeIdProp.GetValue(nodeChunk.Data);
+                    
+                    // For scnSceneNodeId, we need to compare the Id property within it
+                    if (nodeNodeId != null && chunkNodeId != null)
+                    {
+                        var nodeIdType = nodeNodeId.GetType();
+                        var idProp = nodeIdType.GetProperty("Id");
+                        if (idProp != null)
+                        {
+                            var nodeIdValue = idProp.GetValue(nodeNodeId);
+                            var chunkIdValue = idProp.GetValue(chunkNodeId);
+                            if (nodeIdValue != null && chunkIdValue != null && nodeIdValue.Equals(chunkIdValue))
+                            {
+                                return nodeChunk;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        return null;
+    }
+
+    private void ExpandParentNodes(ChunkViewModel chunk)
+    {
+        if (chunk.Parent != null)
+        {
+            chunk.Parent.IsExpanded = true;
+            ExpandParentNodes(chunk.Parent);
+        }
+    }
+
+    private ChunkViewModel FindChunkInTree(ChunkViewModel root, object targetData)
     {
         if (root == null || targetData == null) return null;
 
@@ -831,7 +1041,7 @@ public partial class RDTGraphView2
         WolvenKit.App.ViewModels.Documents.RDTGraphViewModel2 graphViewModel,
         GraphEditorView graphEditor)
     {
-        if (dataViewModel?.RootChunk == null || graphViewModel?.MainGraph == null) return;
+        if (dataViewModel?.GetRootChunk() == null || graphViewModel?.MainGraph == null) return;
 
         // The old logic for real-time sync via timers is being replaced
         // by the OnSaveCompleted event, which is more reliable.
@@ -883,9 +1093,10 @@ public partial class RDTGraphView2
                 System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
                 {
                     // Force full tree refresh by marking root as dirty
-                    if (dataViewModel.RootChunk != null && !dataViewModel.DirtyChunks.Contains(dataViewModel.RootChunk))
+                    var rootChunk = dataViewModel.GetRootChunk();
+                    if (rootChunk != null && !dataViewModel.DirtyChunks.Contains(rootChunk))
                     {
-                        dataViewModel.DirtyChunks.Add(dataViewModel.RootChunk);
+                        dataViewModel.DirtyChunks.Add(rootChunk);
                     }
                     dataViewModel.Parent?.SetIsDirty(true);
                 });
@@ -900,7 +1111,7 @@ public partial class RDTGraphView2
                             var changedNode = nodeSender as WolvenKit.App.ViewModels.GraphEditor.NodeViewModel;
                             if (changedNode?.Data != null)
                             {
-                                var correspondingChunk = FindChunkInTree(dataViewModel.RootChunk, changedNode.Data);
+                                var correspondingChunk = FindChunkInTree(dataViewModel.GetRootChunk(), changedNode.Data);
                                 if (correspondingChunk != null)
                                 {
                                     System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
@@ -1063,4 +1274,163 @@ public partial class RDTGraphView2
             }
         }
     }
+
+    private void SetupDialogInterception()
+    {
+        var appViewModel = Locator.Current.GetService<WolvenKit.App.ViewModels.Shell.AppViewModel>();
+        if (appViewModel != null)
+        {
+            // Store the original SetActiveDialog method
+            _originalSetActiveDialog = appViewModel.SetActiveDialog;
+            
+            // Replace with our custom implementation that shows dialogs on fullscreen window
+            appViewModel.SetActiveDialog = async (dialogViewModel) =>
+            {
+                if (_fullScreenWindow != null && dialogViewModel != null)
+                {
+                    // Show dialog on fullscreen window instead
+                    await ShowDialogOnFullScreenWindow(dialogViewModel);
+                }
+                else
+                {
+                    // Fallback to original behavior
+                    await _originalSetActiveDialog(dialogViewModel);
+                }
+            };
+        }
+    }
+
+    private void RestoreDialogInterception()
+    {
+        var appViewModel = Locator.Current.GetService<WolvenKit.App.ViewModels.Shell.AppViewModel>();
+        if (appViewModel != null && _originalSetActiveDialog != null)
+        {
+            // Restore the original SetActiveDialog method
+            appViewModel.SetActiveDialog = _originalSetActiveDialog;
+            _originalSetActiveDialog = null;
+        }
+    }
+
+    private async System.Threading.Tasks.Task ShowDialogOnFullScreenWindow(WolvenKit.App.ViewModels.Dialogs.DialogViewModel dialogViewModel)
+    {
+        // Create the appropriate dialog view based on the view model type
+        System.Windows.Window dialog = null;
+        
+        switch (dialogViewModel)
+        {
+            case WolvenKit.App.ViewModels.Dialogs.TypeSelectorDialogViewModel typeSelectorViewModel:
+                // Create a window wrapper for the TypeSelectorDialog UserControl
+                dialog = CreateTypeSelectorDialogWindow(typeSelectorViewModel);
+                break;
+            case WolvenKit.App.ViewModels.Dialogs.InputDialogViewModel inputViewModel:
+                dialog = new WolvenKit.Views.Dialogs.InputDialogView();
+                dialog.DataContext = inputViewModel;
+                break;
+            case WolvenKit.App.ViewModels.Dialogs.RenameDialogViewModel renameViewModel:
+                dialog = new WolvenKit.Views.Dialogs.Windows.RenameDialog();
+                dialog.DataContext = renameViewModel;
+                break;
+            // Add more dialog types as needed
+        }
+
+        if (dialog != null)
+        {
+            // Set the fullscreen window as the owner
+            dialog.Owner = _fullScreenWindow;
+            dialog.WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner;
+            
+            // Show the dialog
+            var result = dialog.ShowDialog();
+            
+            // Handle the result if needed
+            if (result == true && dialogViewModel.DialogHandler != null)
+            {
+                dialogViewModel.DialogHandler(dialogViewModel);
+            }
+        }
+    }
+
+    private System.Windows.Window CreateTypeSelectorDialogWindow(WolvenKit.App.ViewModels.Dialogs.TypeSelectorDialogViewModel viewModel)
+    {
+        // Create a window to host the TypeSelectorDialog UserControl
+        var window = new System.Windows.Window
+        {
+            Title = "Select Type",
+            Width = 600,
+            Height = 400,
+            WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner,
+            ResizeMode = System.Windows.ResizeMode.CanResize,
+            Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(32, 32, 32))
+        };
+
+        // Create the TypeSelectorDialog UserControl
+        var typeSelectorDialog = new WolvenKit.Views.Dialogs.TypeSelectorDialog
+        {
+            ViewModel = viewModel,
+            DataContext = viewModel
+        };
+
+        // Add OK and Cancel buttons
+        var grid = new System.Windows.Controls.Grid();
+        grid.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = new System.Windows.GridLength(1, System.Windows.GridUnitType.Star) });
+        grid.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = System.Windows.GridLength.Auto });
+
+        // Add the TypeSelectorDialog to the top row
+        System.Windows.Controls.Grid.SetRow(typeSelectorDialog, 0);
+        grid.Children.Add(typeSelectorDialog);
+
+        // Add button panel
+        var buttonPanel = new System.Windows.Controls.StackPanel
+        {
+            Orientation = System.Windows.Controls.Orientation.Horizontal,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
+            Margin = new System.Windows.Thickness(10)
+        };
+
+        var okButton = new System.Windows.Controls.Button
+        {
+            Content = "OK",
+            Width = 75,
+            Height = 25,
+            Margin = new System.Windows.Thickness(5, 0, 0, 0),
+            IsDefault = true
+        };
+        okButton.Click += (s, e) =>
+        {
+            if (viewModel.OkCommand.CanExecute(null))
+            {
+                viewModel.OkCommand.Execute(null);
+                window.DialogResult = true;
+                window.Close();
+            }
+        };
+
+        var cancelButton = new System.Windows.Controls.Button
+        {
+            Content = "Cancel",
+            Width = 75,
+            Height = 25,
+            Margin = new System.Windows.Thickness(5, 0, 0, 0),
+            IsCancel = true
+        };
+        cancelButton.Click += (s, e) =>
+        {
+            if (viewModel.CancelCommand.CanExecute(null))
+            {
+                viewModel.CancelCommand.Execute(null);
+            }
+            window.DialogResult = false;
+            window.Close();
+        };
+
+        buttonPanel.Children.Add(okButton);
+        buttonPanel.Children.Add(cancelButton);
+
+        System.Windows.Controls.Grid.SetRow(buttonPanel, 1);
+        grid.Children.Add(buttonPanel);
+
+        window.Content = grid;
+        return window;
+    }
 }
+
