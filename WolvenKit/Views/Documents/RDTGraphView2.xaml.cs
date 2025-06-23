@@ -13,6 +13,7 @@ using WolvenKit.Core.Interfaces;
 using WolvenKit.RED4.Types;
 using WolvenKit.Views.GraphEditor;
 using WolvenKit.Views.Tools;
+using MahApps.Metro.IconPacks;
 
 namespace WolvenKit.Views.Documents;
 /// <summary>
@@ -28,6 +29,7 @@ public partial class RDTGraphView2
     private bool _graphRefreshPending = false;
     private System.Windows.Controls.StackPanel _fullScreenBreadcrumb;
     private WolvenKit.App.ViewModels.Shell.AppViewModel _appViewModel;
+    private System.Windows.Controls.TabControl _curatedTabs;
 
     public RDTGraphView2()
     {
@@ -309,6 +311,7 @@ public partial class RDTGraphView2
         _fullScreenGraphViewModel = null;
         _fullScreenBreadcrumb = null;
         _graphRefreshPending = false;
+        _curatedTabs = null;
         
         // Update state
         _isFullScreen = false;
@@ -412,25 +415,34 @@ public partial class RDTGraphView2
         System.Windows.Controls.Grid.SetRow(breadcrumbPanel, 0);
         topLevelGrid.Children.Add(breadcrumbPanel);
 
+        // Store references for synchronization BEFORE creating panels
+        _fullScreenDataViewModel = dataViewModel;
+        _fullScreenGraphViewModel = graphViewModel;
+
         // Create the main content grid for the combined fullscreen layout
         var mainGrid = new System.Windows.Controls.Grid();
         
-        // Define columns: Tree (30%) | Graph (50%) with splitter
-        // Note: The tree panel internally has its own columns for tree (60%) and properties (40%)
-        // So the effective widths will be: Tree (18%) | Properties (12%) | Graph (50%)
-        // To get Tree 30% and Properties 20%, we need to adjust the main columns
-        mainGrid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = new System.Windows.GridLength(50, System.Windows.GridUnitType.Star) }); // This will contain tree (30%) + properties (20%)
+        // Define columns: Curated Panels (50%) | Graph (50%) with splitter
+        mainGrid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = new System.Windows.GridLength(50, System.Windows.GridUnitType.Star) }); // Curated panels
         mainGrid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = new System.Windows.GridLength(4, System.Windows.GridUnitType.Pixel) });
         mainGrid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = new System.Windows.GridLength(50, System.Windows.GridUnitType.Star) }); // Graph (50%)
 
-        // Tree View Panel
-        var treePanel = CreateFullScreenTreePanel("Data Structure", dataViewModel);
-        System.Windows.Controls.Grid.SetColumn(treePanel, 0);
-        mainGrid.Children.Add(treePanel);
-
-        // Store references for synchronization
-        _fullScreenDataViewModel = dataViewModel;
-        _fullScreenGraphViewModel = graphViewModel;
+        // Check if this is a scene file to show curated panels
+        var sceneData = dataViewModel.GetData();
+        if (sceneData is scnSceneResource)
+        {
+            // Curated Scene Panels
+            var curatedPanels = CreateCuratedScenePanels(dataViewModel);
+            System.Windows.Controls.Grid.SetColumn(curatedPanels, 0);
+            mainGrid.Children.Add(curatedPanels);
+        }
+        else
+        {
+            // Fallback to regular tree view for non-scene files
+            var treePanel = CreateFullScreenTreePanel("Data Structure", dataViewModel);
+            System.Windows.Controls.Grid.SetColumn(treePanel, 0);
+            mainGrid.Children.Add(treePanel);
+        }
 
         // Splitter
         var splitter1 = new System.Windows.Controls.GridSplitter
@@ -787,6 +799,9 @@ public partial class RDTGraphView2
                     var selectedNode = graphEditor.SelectedNode;
                     if (selectedNode != null && dataViewModel != null)
                     {
+                        // Only sync tree selection if the Node Properties tab is active
+                        if (_curatedTabs != null && _curatedTabs.SelectedIndex == 1) // 1 is the index for "Node Properties"
+                    {
                         // Find corresponding chunk in tree
                             var correspondingChunk = FindChunkInTree(dataViewModel.GetRootChunk(), selectedNode.Data);
                         if (correspondingChunk != null)
@@ -895,7 +910,8 @@ public partial class RDTGraphView2
                             }
                         }
                     }
-                };
+                }
+            };
 
             // Subscribe to graph data changes to update tree
             SetupGraphDataChangeSync(dataViewModel, graphViewModel);
@@ -1273,6 +1289,198 @@ public partial class RDTGraphView2
                 fileElement.Text = $"{filename}{dirtyIndicator}";
             }
         }
+    }
+
+    private System.Windows.Controls.Border CreateCuratedScenePanels(WolvenKit.App.ViewModels.Documents.RDTDataViewModel dataViewModel)
+    {
+        var border = new System.Windows.Controls.Border
+        {
+            Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(32, 32, 32)),
+            BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(64, 64, 64)),
+            BorderThickness = new System.Windows.Thickness(1, 1, 1, 1)
+        };
+
+        var tabControl = new System.Windows.Controls.TabControl
+        {
+            Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(32, 32, 32)),
+            BorderThickness = new System.Windows.Thickness(0),
+            Margin = new System.Windows.Thickness(4)
+        };
+
+        // Create and add the tabs
+        var actorsTab = CreateFilteredTab("Actors & Props", PackIconMaterialKind.AccountGroupOutline, dataViewModel, new[] { "actors", "playerActors", "debugSymbols", "props" });
+        var nodesTab = CreateFilteredTab("Node Properties", PackIconMaterialKind.SitemapOutline, dataViewModel, new[] { "sceneGraph" });
+        var resourcesTab = CreateFilteredTab("Resource Definition", PackIconMaterialKind.PackageVariantClosed, dataViewModel, new[]
+        {
+            "resouresReferences",
+            "ridResources",
+            "effectInstances",
+            "effectDefinitions",
+            "workspotInstances",
+            "workspots"
+        });
+        var localizationTab = CreateFilteredTab("Localization", PackIconMaterialKind.Translate, dataViewModel, new[] { "screenplayStore", "locStore", "voInfo" });
+        var logicTab = CreateFilteredTab("Scene Logic", PackIconMaterialKind.ArrowDecisionOutline, dataViewModel, new[]
+        {
+            "entryPoints",
+            "exitPoints",
+            "notablePoints",
+            "interruptionScenarios",
+            "executionTags",
+            "executionTagEntries",
+            "sceneCategoryTag"
+        });
+        var metadataTab = CreateFilteredTab("Metadata & Markers", PackIconMaterialKind.TagOutline, dataViewModel, new[]
+        {
+            "localMarkers",
+            "referencePoints",
+            "version",
+            "sceneSolutionHash",
+            "cookingPlatform"
+        });
+
+        tabControl.Items.Add(actorsTab);
+        tabControl.Items.Add(nodesTab);
+        tabControl.Items.Add(resourcesTab);
+        tabControl.Items.Add(localizationTab);
+        tabControl.Items.Add(logicTab);
+        tabControl.Items.Add(metadataTab);
+        
+        _curatedTabs = tabControl;
+
+        // Add event handler to clear selection on tab switch
+        tabControl.SelectionChanged += (sender, args) =>
+        {
+            if (args.Source is System.Windows.Controls.TabControl)
+            {
+                // When a new tab is selected, select the first item in its tree
+                if (tabControl.SelectedItem is System.Windows.Controls.TabItem { Content: System.Windows.Controls.Border { Child: System.Windows.Controls.Grid contentGrid } } selectedTab)
+                {
+                    if (contentGrid.Children.OfType<WolvenKit.Views.Tools.RedTreeView>().FirstOrDefault() is { } treeView)
+                    {
+                        var items = treeView.ItemsSource as System.Collections.IEnumerable;
+                        if (items?.OfType<GroupedChunkViewModel>().FirstOrDefault() is { } group &&
+                            group.TVProperties.Any())
+                        {
+                            dataViewModel.SelectedChunk = group.TVProperties.First();
+                        }
+                    }
+                }
+            }
+        };
+
+        border.Child = tabControl;
+        return border;
+    }
+
+    private System.Windows.Controls.TabItem CreateFilteredTab(string tabTitle, PackIconMaterialKind iconKind, WolvenKit.App.ViewModels.Documents.RDTDataViewModel dataViewModel, string[] propertyNames)
+    {
+        // Create a header with an icon and text
+        var headerPanel = new System.Windows.Controls.StackPanel
+        {
+            Orientation = System.Windows.Controls.Orientation.Horizontal
+        };
+        headerPanel.Children.Add(new PackIconMaterial 
+        { 
+            Kind = iconKind, 
+            VerticalAlignment = System.Windows.VerticalAlignment.Center, 
+            Margin = new System.Windows.Thickness(0, 0, 6, 0) 
+        });
+        headerPanel.Children.Add(new System.Windows.Controls.TextBlock 
+        { 
+            Text = tabTitle, 
+            VerticalAlignment = System.Windows.VerticalAlignment.Center 
+        });
+        
+        var tabItem = new System.Windows.Controls.TabItem
+        {
+            Header = headerPanel,
+            Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(48, 48, 48)),
+            Foreground = System.Windows.Media.Brushes.White,
+            Padding = new System.Windows.Thickness(8, 5, 8, 5)
+        };
+        
+        // Add a border around the content
+        var contentBorder = new System.Windows.Controls.Border
+        {
+            BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(64, 64, 64)),
+            BorderThickness = new System.Windows.Thickness(1),
+            Margin = new System.Windows.Thickness(0, 4, 0, 0) // Add some space from the tab header
+        };
+        
+        // Content Grid
+        var contentGrid = new System.Windows.Controls.Grid();
+        contentGrid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = new System.Windows.GridLength(3, System.Windows.GridUnitType.Star) });
+        contentGrid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = new System.Windows.GridLength(4, System.Windows.GridUnitType.Pixel) });
+        contentGrid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = new System.Windows.GridLength(2, System.Windows.GridUnitType.Star) });
+
+        // Tree View
+        var treeView = new WolvenKit.Views.Tools.RedTreeView
+        {
+            Margin = new System.Windows.Thickness(4, 4, 4, 4)
+        };
+        treeView.SetBinding(System.Windows.Controls.UserControl.DataContextProperty, new System.Windows.Data.Binding { Source = dataViewModel });
+        treeView.SetBinding(WolvenKit.Views.Tools.RedTreeView.SelectedItemProperty, new System.Windows.Data.Binding("SelectedChunk") { Mode = System.Windows.Data.BindingMode.TwoWay });
+        treeView.SetBinding(WolvenKit.Views.Tools.RedTreeView.SelectedItemsProperty, new System.Windows.Data.Binding("SelectedChunks") { Mode = System.Windows.Data.BindingMode.TwoWay });
+        
+        System.Windows.Controls.Grid.SetColumn(treeView, 0);
+        contentGrid.Children.Add(treeView);
+
+        // Defer data loading
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+        {
+            var rootChunk = dataViewModel.GetRootChunk();
+            if (rootChunk == null) return;
+            
+            rootChunk.IsExpanded = true;
+
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                var propertiesToShow = new System.Collections.Generic.List<ChunkViewModel>();
+
+                if (rootChunk.TVProperties != null)
+                {
+                    foreach (var propertyName in propertyNames)
+                    {
+                        var chunk = rootChunk.TVProperties.FirstOrDefault(p => p.Name == propertyName);
+                        if (chunk != null)
+                        {
+                            propertiesToShow.Add(chunk);
+                        }
+                    }
+                }
+
+                if (propertiesToShow.Any())
+                {
+                    var filteredRoot = new GroupedChunkViewModel(tabTitle, propertiesToShow)
+                    {
+                        IsExpanded = true
+                    };
+                    treeView.ItemsSource = new System.Collections.ObjectModel.ObservableCollection<object> { filteredRoot };
+                }
+
+            }), System.Windows.Threading.DispatcherPriority.Background);
+        }), System.Windows.Threading.DispatcherPriority.Loaded);
+
+        // Splitter
+        var splitter = new System.Windows.Controls.GridSplitter
+        {
+            Width = 4,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
+            Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(64, 64, 64))
+        };
+        System.Windows.Controls.Grid.SetColumn(splitter, 1);
+        contentGrid.Children.Add(splitter);
+
+        // Property Editor
+        var propertyEditor = new WolvenKit.Views.Editors.RedTypeView();
+        propertyEditor.SetBinding(System.Windows.Controls.UserControl.DataContextProperty, new System.Windows.Data.Binding("SelectedChunk") { Source = dataViewModel });
+        System.Windows.Controls.Grid.SetColumn(propertyEditor, 2);
+        contentGrid.Children.Add(propertyEditor);
+        
+        contentBorder.Child = contentGrid;
+        tabItem.Content = contentBorder;
+        return tabItem;
     }
 
     private void SetupDialogInterception()
