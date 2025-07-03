@@ -1,0 +1,82 @@
+pr-comment:
+    runs-on: ubuntu-latest
+    needs: [desktop-win]
+    if: always() && github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
+      actions: read
+    steps:
+      - name: Update or create PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              // Get all comments on the PR
+              const { data: comments } = await github.rest.issues.listComments({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
+              
+              // Find existing bot comment
+              const botComment = comments.find(comment => 
+                comment.user.login === 'github-actions[bot]' && 
+                comment.body.includes('Windows Build')
+              );
+              
+              const status = '${{ needs.desktop-win.result }}';
+              
+              // Try to get artifact info if build succeeded
+              let artifactInfo = null;
+              if (status === 'success') {
+                try {
+                  const { data: artifacts } = await github.rest.actions.listWorkflowRunArtifacts({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    run_id: context.runId,
+                  });
+                  
+                  artifactInfo = artifacts.artifacts.find(a => a.name === 'wolvenkit-desktop');
+                } catch (e) {
+                  console.log('Could not fetch artifact info:', e.message);
+                }
+              }
+              
+              let body = '';
+              if (status === 'success') {
+                body = `## ✅ Windows Build Available!\n\n`;
+                
+                if (artifactInfo) {
+                  body += `**[📥 Download wolvenkit-desktop.zip (${(artifactInfo.size_in_bytes / 1048576).toFixed(1)} MB)](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}/artifacts/${artifactInfo.id})**\n\n`;
+                  body += `*Size: ${(artifactInfo.size_in_bytes / 1048576).toFixed(1)} MB*\n`;
+                  body += `*Expires: ${new Date(artifactInfo.expires_at).toLocaleDateString()}*\n\n`;
+                } else {
+                  body += `**[📥 Download wolvenkit-desktop.zip](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}#artifacts)**\n\n`;
+                }
+                
+                body += `*Build completed at ${new Date().toLocaleString()}*`;
+              } else {
+                body = `## ❌ Windows Build Failed\n\n`;
+                body += `[View build logs](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`;
+              }
+              
+              // Update or create comment
+              if (botComment) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: botComment.id,
+                  body: body
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body: body
+                });
+              }
+            } catch (error) {
+              console.error('Error updating PR comment:', error);
+              core.setFailed(`Failed to update PR comment: ${error.message}`);
+            }
